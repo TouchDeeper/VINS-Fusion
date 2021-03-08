@@ -24,7 +24,8 @@
 Estimator estimator;
 
 queue<sensor_msgs::ImuConstPtr> imu_buf;
-queue<sensor_msgs::PointCloudConstPtr> feature_buf;
+queue<sensor_msgs::PointCloudConstPtr> feature0_buf;
+queue<sensor_msgs::PointCloudConstPtr> feature1_buf;
 queue<sensor_msgs::ImageConstPtr> img0_buf;
 queue<sensor_msgs::ImageConstPtr> img1_buf;
 std::mutex m_buf;
@@ -147,7 +148,19 @@ void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
     return;
 }
 
+void feature0_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
+{
+    m_buf.lock();
+    feature0_buf.push(feature_msg);
+    m_buf.unlock();
+}
 
+void feature1_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
+{
+    m_buf.lock();
+    feature1_buf.push(feature_msg);
+    m_buf.unlock();
+}
 void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
 {
     map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> featureFrame;
@@ -250,8 +263,9 @@ int main(int argc, char **argv)
     registerPub(n);
 //TODO transport hints 怎么用
     ros::Subscriber sub_imu = n.subscribe(IMU_TOPIC, 2000, imu_callback, ros::TransportHints().tcpNoDelay());
-    ros::Subscriber sub_feature = n.subscribe("/feature_tracker/feature", 2000, feature_callback);
-    ros::Subscriber sub_img0 = n.subscribe(IMAGE0_TOPIC, 100, img0_callback);
+//    ros::Subscriber sub_feature = n.subscribe("/sim/camera/feature", 2000, feature_callback);
+//    ros::Subscriber sub_img0 = n.subscribe(IMAGE0_TOPIC, 100, img0_callback);
+    ros::Subscriber sub_feature0 = n.subscribe(IMAGE0_TOPIC, 100, img0_callback);
     ros::Subscriber sub_img1 = n.subscribe(IMAGE1_TOPIC, 100, img1_callback);
     ros::Subscriber sub_restart = n.subscribe("/vins_restart", 100, restart_callback);
     ros::Subscriber sub_imu_switch = n.subscribe("/vins_imu_switch", 100, imu_switch_callback);

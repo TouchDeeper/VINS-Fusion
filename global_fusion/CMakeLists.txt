@@ -14,20 +14,20 @@ find_package(catkin REQUIRED COMPONENTS
 
 find_package(Ceres REQUIRED)
 
-add_subdirectory(./ThirdParty/GeographicLib/)
+add_subdirectory(ThirdParty/GeographicLib)
 
 include_directories(
   ${catkin_INCLUDE_DIRS}
   ${CERES_INCLUDE_DIRS}
-  ./ThirdParty/GeographicLib/include/
+        ThirdParty/GeographicLib/include
 )
 
 
 catkin_package()
 
 
-add_executable(global_fusion_node 
-	src/globalOptNode.cpp
-	src/globalOpt.cpp)
+add_executable(global_fusion_node
+        src/globalOptNode.cpp
+        src/globalOpt.cpp)
 
 target_link_libraries(global_fusion_node ${catkin_LIBRARIES} ${CERES_LIBRARIES} libGeographiccc) 

@@ -68,7 +68,7 @@ bool InitialEXRotation::CalibrationExRotation(vector<pair<Vector3d, Vector3d>> c
     //cout << ric << endl;
     Vector3d ric_cov;
     ric_cov = svd.singularValues().tail<3>();
-    if (frame_count >= WINDOW_SIZE && ric_cov(1) > 0.25)
+    if (frame_count >= WINDOW_SIZE && ric_cov(1) > 0.25)//TODO 为什么判断index=1处的值
     {
         calib_ric_result = ric;
         return true;

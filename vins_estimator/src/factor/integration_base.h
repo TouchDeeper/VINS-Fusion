@@ -59,7 +59,7 @@ class IntegrationBase
         for (int i = 0; i < static_cast<int>(dt_buf.size()); i++)
             propagate(dt_buf[i], acc_buf[i], gyr_buf[i]);
     }
-
+    //预积分，且进行了预积分的协方差累计，进行了预积分相对bias的变化的变化雅可比的计算
     void midPointIntegration(double _dt, 
                             const Eigen::Vector3d &_acc_0, const Eigen::Vector3d &_gyr_0,
                             const Eigen::Vector3d &_acc_1, const Eigen::Vector3d &_gyr_1,
@@ -130,8 +130,8 @@ class IntegrationBase
 
             //step_jacobian = F;
             //step_V = V;
-            jacobian = F * jacobian;
-            covariance = F * covariance * F.transpose() + V * noise * V.transpose();
+            jacobian = F * jacobian;//这个是累计的雅可比，用于预积分的bias update
+            covariance = F * covariance * F.transpose() + V * noise * V.transpose();//协方差传递
         }
 
     }

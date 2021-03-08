@@ -255,10 +255,17 @@ bool FeatureManager::solvePoseByPnP(Eigen::Matrix3d &R, Eigen::Vector3d &P,
 
     return true;
 }
-
+/**
+ *
+ * @param frameCnt
+ * @param Ps
+ * @param Rs
+ * @param tic
+ * @param ric
+ */
 void FeatureManager::initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[])
 {
-
+    //对第一帧图像不做处理；因为此时路标点还未三角化，需要利用第一帧双目图像，进行路标点三角化
     if(frameCnt > 0)
     {
         vector<cv::Point2f> pts2D;
@@ -268,7 +275,7 @@ void FeatureManager::initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs
             if (it_per_id.estimated_depth > 0)
             {
                 int index = frameCnt - it_per_id.start_frame;
-                if((int)it_per_id.feature_per_frame.size() >= index + 1)
+                if((int)it_per_id.feature_per_frame.size() >= index + 1)//该路标点从start_frame图像帧到frameCnt对应的图像帧都能被观测到
                 {
                     Vector3d ptsInCam = ric[0] * (it_per_id.feature_per_frame[0].point * it_per_id.estimated_depth) + tic[0];
                     Vector3d ptsInWorld = Rs[it_per_id.start_frame] * ptsInCam + Ps[it_per_id.start_frame];
@@ -282,7 +289,7 @@ void FeatureManager::initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs
         }
         Eigen::Matrix3d RCam;
         Eigen::Vector3d PCam;
-        // trans to w_T_cam
+        // trans to w_T_cam 以上一帧图像在世界坐标系下的pose作为当前帧PnP求解的初值
         RCam = Rs[frameCnt - 1] * ric[0];
         PCam = Rs[frameCnt - 1] * tic[0] + Ps[frameCnt - 1];
 
@@ -310,17 +317,17 @@ void FeatureManager::triangulate(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vec
         {
             int imu_i = it_per_id.start_frame;
             Eigen::Matrix<double, 3, 4> leftPose;
-            Eigen::Vector3d t0 = Ps[imu_i] + Rs[imu_i] * tic[0];
-            Eigen::Matrix3d R0 = Rs[imu_i] * ric[0];
-            leftPose.leftCols<3>() = R0.transpose();
-            leftPose.rightCols<1>() = -R0.transpose() * t0;
+            Eigen::Vector3d t0 = Ps[imu_i] + Rs[imu_i] * tic[0];//w_t_cl
+            Eigen::Matrix3d R0 = Rs[imu_i] * ric[0];//w_R_cl
+            leftPose.leftCols<3>() = R0.transpose(); //cl_R_w
+            leftPose.rightCols<1>() = -R0.transpose() * t0;//cl_t_w
             //cout << "left pose " << leftPose << endl;
 
             Eigen::Matrix<double, 3, 4> rightPose;
-            Eigen::Vector3d t1 = Ps[imu_i] + Rs[imu_i] * tic[1];
-            Eigen::Matrix3d R1 = Rs[imu_i] * ric[1];
-            rightPose.leftCols<3>() = R1.transpose();
-            rightPose.rightCols<1>() = -R1.transpose() * t1;
+            Eigen::Vector3d t1 = Ps[imu_i] + Rs[imu_i] * tic[1];//w_t_cr
+            Eigen::Matrix3d R1 = Rs[imu_i] * ric[1];//w_R_cr
+            rightPose.leftCols<3>() = R1.transpose();//cr_R_w
+            rightPose.rightCols<1>() = -R1.transpose() * t1;//cr_t_w
             //cout << "right pose " << rightPose << endl;
 
             Eigen::Vector2d point0, point1;
@@ -446,7 +453,7 @@ void FeatureManager::removeOutlier(set<int> &outlierIndex)
         }
     }
 }
-
+//移动特征点的主帧
 void FeatureManager::removeBackShiftDepth(Eigen::Matrix3d marg_R, Eigen::Vector3d marg_P, Eigen::Matrix3d new_R, Eigen::Vector3d new_P)
 {
     for (auto it = feature.begin(), it_next = feature.begin();
@@ -454,7 +461,7 @@ void FeatureManager::removeBackShiftDepth(Eigen::Matrix3d marg_R, Eigen::Vector3
     {
         it_next++;
 
-        if (it->start_frame != 0)
+        if (it->start_frame != 0) //第一次观察到该路标点的图像帧不是被边缘化掉的老的第0帧，将start_frame递减1
             it->start_frame--;
         else
         {
@@ -465,8 +472,8 @@ void FeatureManager::removeBackShiftDepth(Eigen::Matrix3d marg_R, Eigen::Vector3
                 feature.erase(it);
                 continue;
             }
-            else
-            {
+            else // 该路标点被观测的次数满足要求，将深度信息在新的第0个图像帧中进行表示
+            {//TODO(tzhang):可以添加该路标点是否在新的第0帧中被观测到的判断；若没观测到则直接剔除该路标点
                 Eigen::Vector3d pts_i = uv_i * it->estimated_depth;
                 Eigen::Vector3d w_pts_i = marg_R * pts_i + marg_P;
                 Eigen::Vector3d pts_j = new_R.transpose() * (w_pts_i - new_P);
@@ -494,9 +501,9 @@ void FeatureManager::removeBack()
     {
         it_next++;
 
-        if (it->start_frame != 0)
+        if (it->start_frame != 0)//第一次观测到路标点的图像帧不是被边缘化的帧（也即第0帧）；此时仅将观测到路标点的图像帧索引递减
             it->start_frame--;
-        else
+        else //第一次观测到路标点的图像帧将被删除
         {
             it->feature_per_frame.erase(it->feature_per_frame.begin());
             if (it->feature_per_frame.size() == 0)
@@ -511,18 +518,19 @@ void FeatureManager::removeFront(int frame_count)
     {
         it_next++;
 
-        if (it->start_frame == frame_count)
+        if (it->start_frame == frame_count) //第一次观测到路标点的图像帧索引为WINDOW_SIZE，路标点的起始观测索引递减
         {
             it->start_frame--;
         }
         else
         {
             int j = WINDOW_SIZE - 1 - it->start_frame;
-            if (it->endFrame() < frame_count - 1)
+            if (it->endFrame() < frame_count - 1)//路标点在被边缘化的图像帧（WINDOW_SIZE-1）和滑窗中最后的图像帧（WINDOW_SIZE）中未被观测
                 continue;
-            it->feature_per_frame.erase(it->feature_per_frame.begin() + j);
-            if (it->feature_per_frame.size() == 0)
+            it->feature_per_frame.erase(it->feature_per_frame.begin() + j); //剔除观测到路标点的图像帧中即将被边缘化的图像帧（即WINDOW_SIZE-1）
+            if (it->feature_per_frame.size() == 0) //相当于直接丢掉了被边缘化图像帧的观测
                 feature.erase(it);
+            //TODO:BUG若路标点的第一次观测图像帧恰好为被边缘化的图像帧（WINDOW_SIZE-1），并且还被图像帧（WINDOW_SIZE）观测到，没有进行shift depth的处理？？
         }
     }
 }

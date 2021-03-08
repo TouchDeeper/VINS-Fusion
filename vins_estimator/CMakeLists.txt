@@ -14,8 +14,9 @@ find_package(catkin REQUIRED COMPONENTS
     tf
     cv_bridge
     camera_models
-    image_transport)
-
+    image_transport
+        rosbag)
+set(OpenCV_DIR "/usr/local/share/OpenCV")
 find_package(OpenCV REQUIRED)
 
 # message(WARNING "OpenCV_VERSION: ${OpenCV_VERSION}")
@@ -31,25 +32,37 @@ include_directories(
   ${EIGEN3_INCLUDE_DIR}
 )
 
-catkin_package()
+catkin_package(
+  INCLUDE_DIRS src
+  LIBRARIES vins_lib
+  CATKIN_DEPENDS roscpp
+    std_msgs
+    geometry_msgs
+    nav_msgs
+    tf
+    cv_bridge
+    camera_models
+    image_transport
+        rosbag
+)
 
 add_library(vins_lib
-    src/estimator/parameters.cpp
-    src/estimator/estimator.cpp
-    src/estimator/feature_manager.cpp
-    src/factor/pose_local_parameterization.cpp
-    src/factor/projectionTwoFrameOneCamFactor.cpp
-    src/factor/projectionTwoFrameTwoCamFactor.cpp
-    src/factor/projectionOneFrameTwoCamFactor.cpp
-    src/factor/marginalization_factor.cpp
-    src/utility/utility.cpp
-    src/utility/visualization.cpp
-    src/utility/CameraPoseVisualization.cpp
-    src/initial/solve_5pts.cpp
-    src/initial/initial_aligment.cpp
-    src/initial/initial_sfm.cpp
-    src/initial/initial_ex_rotation.cpp
-    src/featureTracker/feature_tracker.cpp)
+        src/estimator/parameters.cpp
+        src/estimator/estimator.cpp
+        src/estimator/feature_manager.cpp
+        src/factor/pose_local_parameterization.cpp
+        src/factor/projectionTwoFrameOneCamFactor.cpp
+        src/factor/projectionTwoFrameTwoCamFactor.cpp
+        src/factor/projectionOneFrameTwoCamFactor.cpp
+        src/factor/marginalization_factor.cpp
+        src/utility/utility.cpp
+        src/utility/visualization.cpp
+        src/utility/CameraPoseVisualization.cpp
+        src/initial/solve_5pts.cpp
+        src/initial/initial_aligment.cpp
+        src/initial/initial_sfm.cpp
+        src/initial/initial_ex_rotation.cpp
+        src/featureTracker/feature_tracker.cpp)
 target_link_libraries(vins_lib ${catkin_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES})
 
 
@@ -57,8 +70,14 @@ add_executable(vins_node src/rosNodeTest.cpp)
 target_link_libraries(vins_node vins_lib) 
 
 add_executable(kitti_odom_test src/KITTIOdomTest.cpp)
-target_link_libraries(kitti_odom_test vins_lib) 
+target_link_libraries(kitti_odom_test vins_lib)
+
+add_executable(simulation_node src/simulationTest.cpp)
+target_link_libraries(simulation_node vins_lib)
 
 add_executable(kitti_gps_test src/KITTIGPSTest.cpp)
-target_link_libraries(kitti_gps_test vins_lib) 
+target_link_libraries(kitti_gps_test vins_lib)
+
+add_executable(bag_writer src/tool/bagwriter.cpp)
+target_link_libraries(bag_writer ${catkin_LIBRARIES})
 

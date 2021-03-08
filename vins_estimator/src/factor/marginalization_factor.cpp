@@ -8,7 +8,7 @@
  *******************************************************/
 
 #include "marginalization_factor.h"
-
+//求解因子对应的残差与雅克比
 void ResidualBlockInfo::Evaluate()
 {
     residuals.resize(cost_function->num_residuals());
@@ -70,10 +70,10 @@ void ResidualBlockInfo::Evaluate()
 
         for (int i = 0; i < static_cast<int>(parameter_blocks.size()); i++)
         {
-            jacobians[i] = sqrt_rho1_ * (jacobians[i] - alpha_sq_norm_ * residuals * (residuals.transpose() * jacobians[i]));
+            jacobians[i] = sqrt_rho1_ * (jacobians[i] - alpha_sq_norm_ * residuals * (residuals.transpose() * jacobians[i]));//这个可以验算
         }
 
-        residuals *= residual_scaling_;
+        residuals *= residual_scaling_;//也可以验算
     }
 }
 
@@ -94,13 +94,13 @@ MarginalizationInfo::~MarginalizationInfo()
         delete factors[i];
     }
 }
-
+//构建将边缘化变量部分的parameter_block_size和parameter_block_idx
 void MarginalizationInfo::addResidualBlockInfo(ResidualBlockInfo *residual_block_info)
 {
     factors.emplace_back(residual_block_info);
 
-    std::vector<double *> &parameter_blocks = residual_block_info->parameter_blocks;
-    std::vector<int> parameter_block_sizes = residual_block_info->cost_function->parameter_block_sizes();
+    std::vector<double *> &parameter_blocks = residual_block_info->parameter_blocks;  //参数块（引用）
+    std::vector<int> parameter_block_sizes = residual_block_info->cost_function->parameter_block_sizes(); //每个参数块中参数的数目localSize
 
     for (int i = 0; i < static_cast<int>(residual_block_info->parameter_blocks.size()); i++)
     {
@@ -115,14 +115,14 @@ void MarginalizationInfo::addResidualBlockInfo(ResidualBlockInfo *residual_block
         parameter_block_idx[reinterpret_cast<long>(addr)] = 0;
     }
 }
-
+//构建parameter_block_data <变量的内存地址， 变量数据>
 void MarginalizationInfo::preMarginalize()
 {
     for (auto it : factors)
     {
-        it->Evaluate();
+        it->Evaluate();//求解因子对应的残差与雅克比
 
-        std::vector<int> block_sizes = it->cost_function->parameter_block_sizes();
+        std::vector<int> block_sizes = it->cost_function->parameter_block_sizes();//代价函数对应的优化变量参数块的数目
         for (int i = 0; i < static_cast<int>(block_sizes.size()); i++)
         {
             long addr = reinterpret_cast<long>(it->parameter_blocks[i]);
@@ -150,9 +150,9 @@ int MarginalizationInfo::globalSize(int size) const
 void* ThreadsConstructA(void* threadsstruct)
 {
     ThreadsStruct* p = ((ThreadsStruct*)threadsstruct);
-    for (auto it : p->sub_factors)
+    for (auto it : p->sub_factors)//遍历残差因子
     {
-        for (int i = 0; i < static_cast<int>(it->parameter_blocks.size()); i++)
+        for (int i = 0; i < static_cast<int>(it->parameter_blocks.size()); i++)//遍历状态向量
         {
             int idx_i = p->parameter_block_idx[reinterpret_cast<long>(it->parameter_blocks[i])];
             int size_i = p->parameter_block_size[reinterpret_cast<long>(it->parameter_blocks[i])];
@@ -183,7 +183,7 @@ void* ThreadsConstructA(void* threadsstruct)
 void MarginalizationInfo::marginalize()
 {
     int pos = 0;
-    for (auto &it : parameter_block_idx)
+    for (auto &it : parameter_block_idx)//构建边缘化变量部分的索引，即将需要边缘化部分的变量放置在前面
     {
         it.second = pos;
         pos += localSize(parameter_block_size[it.first]);
@@ -215,7 +215,7 @@ void MarginalizationInfo::marginalize()
     A.setZero();
     b.setZero();
     /*
-    for (auto it : factors)
+    for (auto it : factors)//单线程构建A和b
     {
         for (int i = 0; i < static_cast<int>(it->parameter_blocks.size()); i++)
         {
@@ -242,7 +242,7 @@ void MarginalizationInfo::marginalize()
     */
     //multi thread
 
-
+    //多线程构建A和b
     TicToc t_thread_summing;
     pthread_t tids[NUM_THREADS];
     ThreadsStruct threadsstruct[NUM_THREADS];
@@ -278,6 +278,7 @@ void MarginalizationInfo::marginalize()
 
 
     //TODO
+    //为确保数值稳定性，从数值上保证Amm对称
     Eigen::MatrixXd Amm = 0.5 * (A.block(0, 0, m, m) + A.block(0, 0, m, m).transpose());
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes(Amm);
 
@@ -317,14 +318,14 @@ std::vector<double *> MarginalizationInfo::getParameterBlocks(std::unordered_map
     keep_block_idx.clear();
     keep_block_data.clear();
 
-    for (const auto &it : parameter_block_idx)
+    for (const auto &it : parameter_block_idx) //排序大于m的部分为保留的部分，将该部分状态向量的localSize、index、数据、保存数据的地址进行保留
     {
         if (it.second >= m)
         {
             keep_block_size.push_back(parameter_block_size[it.first]);
             keep_block_idx.push_back(parameter_block_idx[it.first]);
             keep_block_data.push_back(parameter_block_data[it.first]);
-            keep_block_addr.push_back(addr_shift[it.first]);
+            keep_block_addr.push_back(addr_shift[it.first]);//仅仅记录滑窗中保留部分的地址
         }
     }
     sum_block_size = std::accumulate(std::begin(keep_block_size), std::end(keep_block_size), 0);
@@ -334,16 +335,17 @@ std::vector<double *> MarginalizationInfo::getParameterBlocks(std::unordered_map
 
 MarginalizationFactor::MarginalizationFactor(MarginalizationInfo* _marginalization_info):marginalization_info(_marginalization_info)
 {
+    //该类模仿ceres的cost function写的
     int cnt = 0;
     for (auto it : marginalization_info->keep_block_size)
     {
-        mutable_parameter_block_sizes()->push_back(it);
+        mutable_parameter_block_sizes()->push_back(it);//设定待优化变量各自的维度， 使用global size
         cnt += it;
     }
     //printf("residual size: %d, %d\n", cnt, n);
-    set_num_residuals(marginalization_info->n);
+    set_num_residuals(marginalization_info->n); //设定残差的维度
 };
-
+//边缘化因子的残差（更新）和雅可比
 bool MarginalizationFactor::Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
 {
     //printf("internal addr,%d, %d\n", (int)parameter_block_sizes().size(), num_residuals());
